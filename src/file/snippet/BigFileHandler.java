@@ -23,7 +23,7 @@ public class BigFileHandler implements Runnable {
 			fileChannel = new RandomAccessFile(file, "rw").getChannel();
 			// 锁定当前文件的部分
 			fileLock = fileChannel.lock(start, end, false);
-			// 对当前文件片段建立内存映射，如果文件过大需要切割成多个片段
+			// 对当前文件片段建立内存映射，如果文件过大需要切割成多个片段！
 			mbBuf = fileChannel.map(FileChannel.MapMode.READ_ONLY, start, end);
 		} catch (FileNotFoundException e) {
 			e.printStackTrace();
@@ -37,7 +37,6 @@ public class BigFileHandler implements Runnable {
 	 * 
 	 * @see java.lang.Runnable#run()
 	 */
-	@Override
 	public void run() {
 		String content = "";
 		StringTokenizer token = new StringTokenizer(content, "\n");
