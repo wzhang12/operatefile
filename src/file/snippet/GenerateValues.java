@@ -20,7 +20,6 @@ public class GenerateValues {
            bw.flush();
            bw.close();
            System.out.print("Ok");
-           
 	}
 
 }

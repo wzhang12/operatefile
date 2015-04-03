@@ -7,7 +7,6 @@ import java.io.RandomAccessFile;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.channels.FileLock;
-import java.nio.charset.Charset;
 import java.util.StringTokenizer;
 
 public class BigFileHandler implements Runnable {
