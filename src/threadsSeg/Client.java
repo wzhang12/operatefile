@@ -1,10 +1,5 @@
 package threadsSeg;
 
-import org.ansj.domain.Term;
-import org.ansj.splitWord.analysis.NlpAnalysis;
-
-import java.util.List;
-
 /**
 * Created by DELL on 2015/7/30.
         */

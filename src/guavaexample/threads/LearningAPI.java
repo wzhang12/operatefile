@@ -1,12 +1,15 @@
 package guavaexample.threads;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.MoreObjects;
+import com.google.common.base.Objects;
+import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.*;
+import org.jetbrains.annotations.Nullable;
 import org.junit.Test;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 
@@ -15,6 +18,7 @@ import java.util.concurrent.Executors;
  */
 public class LearningAPI {
     @Test
+    @Nullable
     public void future() throws Exception {
 
         ListeningExecutorService service = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
@@ -87,5 +91,11 @@ public class LearningAPI {
         String[] subdirs = { "usr", "local", "lib" };
         String directory = Joiner.on("/").join(subdirs);
         System.out.println(directory);
+    }
+    @Test
+    public  void testObjects (){
+        //可利用反射重写类的toString方法
+        System.out.println(MoreObjects.toStringHelper("张文").add("a",1).add("b",2));
+
     }
 }
