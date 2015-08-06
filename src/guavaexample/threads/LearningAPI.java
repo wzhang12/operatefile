@@ -5,7 +5,6 @@ import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.*;
-import org.jetbrains.annotations.Nullable;
 import org.junit.Test;
 
 import java.util.List;
@@ -18,7 +17,6 @@ import java.util.concurrent.Executors;
  */
 public class LearningAPI {
     @Test
-    @Nullable
     public void future() throws Exception {
 
         ListeningExecutorService service = MoreExecutors.listeningDecorator(Executors.newFixedThreadPool(10));
