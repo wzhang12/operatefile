@@ -5,8 +5,6 @@ import java.io.*;
 public class PageWriter {
 
 	private BufferedWriter out;
-	private boolean flag=true;//避免一个程序读完后其他线程仍旧尝试读
-
 	public PageWriter(String filePath) {
 		try {
             out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(filePath),"UTF-8"));
@@ -22,7 +20,9 @@ public class PageWriter {
 		
 
 		try {
+				
 				for(int i=0;i<lines.length;i++){
+					if(lines[i]!=null&&!lines[i].equals(""))
 					out.write(lines[i]+"\n");
 			}
 		}
@@ -32,5 +32,10 @@ public class PageWriter {
 		}
 
 	}
+
+	public BufferedWriter getOut() {
+		return out;
+	}
+	
 	
 }
