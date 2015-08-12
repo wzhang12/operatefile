@@ -58,7 +58,6 @@ public class Main {
                             if(i + Integer.valueOf(pinyinList.get(j).split("_")[1])<s.length()) {
                                 String sententWord=s.substring(i, i + Integer.valueOf(pinyinList.get(j).split("_")[1]));
                                 pinyinSententWord = PinyinHelper.convertToPinyinString(sententWord, "", PinyinFormat.WITHOUT_TONE);
-
                                 if (pinyinList.get(j).split("_")[0].equals(pinyinSententWord)&&!sententWord.equals(pinyinList.get(j).split("_")[2])) {
                                     set.add(s.substring(i, i + Integer.valueOf(pinyinList.get(j).split("_")[1])));
                                 }

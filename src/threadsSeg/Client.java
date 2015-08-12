@@ -15,9 +15,10 @@ public class Client {
         }
         PageReader pageReader=new PageReader(args[0],4000);
         PageWriter pageWriter=new PageWriter(args[1]);
+        SegTask segTask=new SegTask(pageReader,pageWriter,stops);
         Thread[] threads=new Thread[3];
         for (int i=0;i<3;i++){
-            Thread thread = new Thread(new SegTask(pageReader,pageWriter,stops));
+            Thread thread = new Thread(segTask);
             threads[i]=thread;
             thread.start();
         }
