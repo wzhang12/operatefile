@@ -1,19 +1,23 @@
 package verifyDict;
 
-import java.io.BufferedWriter;
-import java.io.DataInputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
-import java.io.OutputStreamWriter;
-import java.lang.reflect.Array;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.Random;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
+import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.widgets.Button;
+import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
@@ -39,6 +43,16 @@ public class MainWindow
     private static Text dictFolder;
 
     private static Text itemnum;
+
+    private static int[] randoms = generateRandomNumberArray(100, 100000);
+
+    private static int currentItemNum = 0;// 数现在进行到第几条
+
+    // 每次点开始的时候需要重置dataInputStream
+    private static RandomAccessFile randomAccessFile = null;
+
+    // key是词语，String是词语所在文件的路径
+    private static HashMap<String, ArrayList<String>> hashMap = new HashMap<String, ArrayList<String>>();
 
     /**
      * Launch the application.
@@ -111,6 +125,8 @@ public class MainWindow
         Button sourceFilePathButton = new Button(main, SWT.NONE);
         sourceFilePathButton.addMouseListener(new MouseAdapter()
         {
+            String sourcePath;
+
             @Override
             public void mouseUp(MouseEvent e)
             {
@@ -118,6 +134,24 @@ public class MainWindow
                 fileDialog.setText("chooser");
                 fileDialog.open();
                 sourceFilePath.setText(fileDialog.getFilterPath() + File.separator + fileDialog.getFileName());
+
+                if (!sourceFilePath.getText().equals(sourcePath)) {
+                    try {
+                        if (randomAccessFile != null) {
+                            randomAccessFile.close();
+                        }
+                    } catch (IOException e2) {
+                        System.err.println("关闭读入流发生异常");
+                    }
+                    sourcePath = sourceFilePath.getText();
+                    String dest = sourcePath.substring(0, sourcePath.lastIndexOf(".")) + ".tmp";
+                    try {
+                        randomAccessFile = new RandomAccessFile(dest, "r");
+                    } catch (FileNotFoundException e1) {
+                        System.err.println("找不到带索引的文件");
+                    }
+                    generateIndexFile(sourcePath, dest);
+                }
 
             }
         });
@@ -128,6 +162,37 @@ public class MainWindow
         dictFolder.setBounds(602, 122, 108, 23);
 
         Button dictFolderButton = new Button(main, SWT.NONE);
+        dictFolderButton.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseUp(MouseEvent e)
+            {
+                DirectoryDialog fileDialog = new DirectoryDialog(main);
+                fileDialog.setText("chooser");
+                fileDialog.open();
+                dictFolder.setText(fileDialog.getFilterPath());
+                ArrayList<String> arrayList = IOUtil.getFolderFilesPath(new File(dictFolder.getText()));
+                for (String path : arrayList) {
+                    try {
+                        String[] words = IOUtil.readLines(path);
+                        for (int i = 0; i < words.length; i++) {
+                            ArrayList<String> list;
+                            if ((list = hashMap.get(words[i])) != null) {
+                                list.add(path);
+                                hashMap.put(words[i], list);
+                            } else {
+                                list = new ArrayList<String>();
+                                list.add(path);
+                                hashMap.put(words[i], list);
+                            }
+                        }
+                    } catch (Exception e1) {
+                        // TODO Auto-generated catch block
+                        e1.printStackTrace();
+                    }
+                }
+            }
+        });
         dictFolderButton.setText("...");
         dictFolderButton.setBounds(716, 120, 36, 27);
 
@@ -147,41 +212,12 @@ public class MainWindow
         label_2.setBounds(602, 151, 125, 17);
 
         Button start = new Button(main, SWT.NONE);
+
         start.addMouseListener(new MouseAdapter()
         {
             @Override
             public void mouseUp(MouseEvent e)
             {
-                String sourcePath = sourceFilePath.getText();
-                String dest = sourcePath.substring(0, sourcePath.lastIndexOf(".")) + ".tmp";
-                if (!new File(dest).exists()) {
-                    PageReader pageReader = new PageReader(sourcePath, 4000);
-                    PageWriter pageWriter = new PageWriter(dest);
-                    SegTask segTask = new SegTask(pageReader, pageWriter);
-                    Thread[] threads = new Thread[3];
-                    for (int i = 0; i < 3; i++) {
-                        Thread thread = new Thread(segTask);
-                        threads[i] = thread;
-                        thread.start();
-                    }
-                    while (true) {
-                        if (!threads[0].isAlive() && !threads[1].isAlive() && !threads[2].isAlive()) {
-                            try {
-                                if (pageWriter != null && pageWriter.getOut() != null) {
-                                    pageWriter.getOut().flush();
-                                    pageWriter.getOut().close();
-                                }
-                                if (pageReader.getIn() != null && pageReader != null) {
-                                    pageReader.getIn().close();
-                                }
-                            } catch (Exception en) {
-                                en.printStackTrace();
-                            }
-                            break;
-                        }
-                    }
-                }// end if
-
             }
         });
         start.setBounds(653, 170, 99, 27);
@@ -191,21 +227,65 @@ public class MainWindow
         progressBar.setBounds(602, 203, 150, 37);
 
         Button previous = new Button(main, SWT.NONE);
+        previous.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseUp(MouseEvent e)
+            {
+                String itemContent = "";
+                try {
+                    currentItemNum--;
+                    if (currentItemNum < 1) {
+                        currentItemNum = 1;
+                    }
+                    itemContent = readIndexFile(randoms[currentItemNum - 1]);
+                } catch (Exception e1) {
+                    // TODO Auto-generated catch block
+                    System.err.println("发生错误");
+                }
+                item.setText(itemContent);
+            }
+        });
         previous.setText("后退");
         previous.setBounds(602, 246, 150, 27);
 
         Button next = new Button(main, SWT.NONE);
-        next.addMouseListener(new MouseAdapter() {
+        next.addMouseListener(new MouseAdapter()
+        {
+
             @Override
-            public void mouseUp(MouseEvent e) {
-                String itemContent="";
+            public void mouseUp(MouseEvent e)
+            {
+                item.setText("");
+                String itemContent = "";
                 try {
-                     itemContent=readIndexFile();
+                    currentItemNum++;
+                    if (currentItemNum > randoms.length) {
+                        currentItemNum = randoms.length;
+                    }
+                    itemContent = readIndexFile(randoms[currentItemNum - 1]);
+                    Set<String> set = hashMap.keySet();
+                    for (String word : set) {
+                        Pattern pattern = Pattern.compile(word.trim());
+                        Matcher matcher = pattern.matcher(itemContent);
+                        if (matcher.find()) {
+                            
+                        }
+                        
+                        Font font = item.getFont();
+                        item.setFont(SWTResourceManager.getFont("微软雅黑", 13, SWT.NORMAL | SWT.COLOR_RED));
+                        item.append(word);
+                        ArrayList<String> pathes = hashMap.get(word);
+                        item.append("(");
+                        for (String path : pathes) {
+                             item.append(path.substring(path.lastIndexOf(File.separator)+1,path.lastIndexOf("."))+"|");
+                        }
+                        item.append(")");
+                        item.setFont(font);
+                    }
                 } catch (Exception e1) {
-                    // TODO Auto-generated catch block
-                   System.err.println("发生错误");
+                    System.err.println("发生错误");
                 }
-                item.setText(itemContent);
             }
         });
         next.setText("前进");
@@ -270,27 +350,15 @@ public class MainWindow
         }
     }
 
-    private static String readIndexFile() throws Exception
+    private static String readIndexFile(int rowNum) throws Exception
     {
-        String sourcePath = sourceFilePath.getText();
-        String dest = sourcePath.substring(0, sourcePath.lastIndexOf(".")) + ".tmp";
-        DataInputStream dataInputStream = new DataInputStream(new FileInputStream(dest));
-        int[] randoms=generateRandomNumberArray(100,100000);
-        if (dataInputStream.available() != 0) {
-            long index=0;
-            while(!isExists(randoms,index=dataInputStream.readLong())){
-                dataInputStream.skipBytes(dataInputStream.readUnsignedShort());
-            }
-            String content=dataInputStream.readUTF();
-            if(randoms[randoms.length-1]==index){
-                dataInputStream.close(); 
-            }
-            return content;
-        }else{
-            dataInputStream.close();
-            return "";
+        while (randomAccessFile.readLong() != rowNum) {
+            randomAccessFile.skipBytes(randomAccessFile.readUnsignedShort());
         }
-        
+        String content = randomAccessFile.readUTF();
+        randomAccessFile.seek(0);
+
+        return content;
 
     }
 
@@ -323,5 +391,36 @@ public class MainWindow
             }
         }
         return false;
+    }
+
+    private static void generateIndexFile(String sourcePath, String dest)
+    {
+        if (!new File(dest).exists()) {
+            PageReader pageReader = new PageReader(sourcePath, 4000);
+            PageWriter pageWriter = new PageWriter(dest);
+            SegTask segTask = new SegTask(pageReader, pageWriter);
+            Thread[] threads = new Thread[3];
+            for (int i = 0; i < 3; i++) {
+                Thread thread = new Thread(segTask);
+                threads[i] = thread;
+                thread.start();
+            }
+            while (true) {
+                if (!threads[0].isAlive() && !threads[1].isAlive() && !threads[2].isAlive()) {
+                    try {
+                        if (pageWriter != null && pageWriter.getOut() != null) {
+                            pageWriter.getOut().flush();
+                            pageWriter.getOut().close();
+                        }
+                        if (pageReader.getIn() != null && pageReader != null) {
+                            pageReader.getIn().close();
+                        }
+                    } catch (Exception en) {
+                        en.printStackTrace();
+                    }
+                    break;
+                }
+            }
+        }
     }
 }

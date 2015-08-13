@@ -2,9 +2,9 @@ package verifyDict;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
-import java.io.FileReader;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.util.ArrayList;
@@ -44,5 +44,26 @@ public class IOUtil {
             out.write(line);
         }
     }
+	   public static ArrayList<String> getFolderFilesPath(File f){
+	         ArrayList<String> arrayList =new ArrayList<String>();
+	        //判断传入对象是否为一个文件夹对象
+	        if(!f.isDirectory()){
+	            System.err.println("你输入的不是一个文件夹，请检查路径是否有误！！");
+	        }
+	        else{
+	            File[] t = f.listFiles();
+	            for(int i=0;i<t.length;i++){
+	                //判断文件列表中的对象是否为文件夹对象，如果是则执行递归，直到把此文件夹中所有文件输出为止
+	                if(t[i].isDirectory()){
+	                    getFolderFilesPath(t[i]);
+	                }
+	                else{
+	                    arrayList.add(t[i].getAbsolutePath());
+	                }
+	            }
+	        }
+	        return arrayList;
+	 
+	    }
 	
 }
