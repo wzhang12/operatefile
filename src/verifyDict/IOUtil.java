@@ -65,5 +65,12 @@ public class IOUtil {
 	        return arrayList;
 	 
 	    }
+	   public static void writeLineByAppend(String filePath, String line) throws Exception {
+	        try (
+	            BufferedWriter out = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(filePath,true), "UTF-8"));
+	        ) {
+	            out.write(line+"\n");
+	        }
+	    }
 	
 }

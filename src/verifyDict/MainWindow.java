@@ -4,35 +4,40 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
+import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.browser.Browser;
+import org.eclipse.swt.browser.LocationAdapter;
+import org.eclipse.swt.browser.LocationEvent;
 import org.eclipse.swt.events.MouseAdapter;
 import org.eclipse.swt.events.MouseEvent;
-import org.eclipse.swt.graphics.Font;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.DirectoryDialog;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Event;
 import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Listener;
+import org.eclipse.swt.widgets.MessageBox;
 import org.eclipse.swt.widgets.ProgressBar;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Text;
-import org.eclipse.wb.swt.SWTResourceManager;
+import org.eclipse.swt.events.FocusAdapter;
+import org.eclipse.swt.events.FocusEvent;
 
 public class MainWindow
 {
     private static Text dictContent;
 
     private static Text dictName;
-
-    private static Text item;
 
     private static Text console;
 
@@ -42,9 +47,10 @@ public class MainWindow
 
     private static Text dictFolder;
 
+    // 输入的记录数
     private static Text itemnum;
 
-    private static int[] randoms = generateRandomNumberArray(100, 100000);
+    private static int[] randoms;
 
     private static int currentItemNum = 0;// 数现在进行到第几条
 
@@ -54,6 +60,42 @@ public class MainWindow
     // key是词语，String是词语所在文件的路径
     private static HashMap<String, ArrayList<String>> hashMap = new HashMap<String, ArrayList<String>>();
 
+    private static Browser item;
+
+    private static int pagenum;
+
+    // fp加起来被选中了多少次
+    private static int fpTotal;
+
+    // tp加起来 被选中了多少次
+    private static int tpTotal;
+
+    // fn加起来 被选中了多少次
+    private static int fnTotal;
+
+    private static double precision;
+
+    private static double recall;
+
+    // 用来记录用户的选择 1是标记有错 2是标记有遗漏 3标记有正确 4其他 0是没有选择
+    private static int[] records;
+
+    private static Label progressComment;
+
+    private static Button fp;
+
+    private static Button fn;
+
+    private static Button tp;
+
+    private static Button spares;
+
+    private static Text resultPath;
+
+    private static Button previous;
+
+    private static Button next;
+
     /**
      * Launch the application.
      * 
@@ -61,8 +103,15 @@ public class MainWindow
      */
     public static void main(String[] args)
     {
+        
         Display display = Display.getDefault();
         final Shell main = new Shell();
+        main.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseUp(MouseEvent e) {
+                main.forceFocus();
+            }
+        });
         main.setSize(778, 710);
         main.setText("VerifyDict");
 
@@ -77,16 +126,12 @@ public class MainWindow
         dictName.setEditable(false);
         dictName.setBounds(10, 61, 80, 25);
 
-        item = new Text(main, SWT.BORDER | SWT.WRAP | SWT.H_SCROLL | SWT.V_SCROLL | SWT.CANCEL);
-        item.setFont(SWTResourceManager.getFont("微软雅黑", 13, SWT.NORMAL));
-        item.setBounds(126, 38, 470, 376);
-
         console = new Text(main, SWT.BORDER | SWT.WRAP | SWT.H_SCROLL | SWT.V_SCROLL | SWT.CANCEL);
         console.setBounds(124, 443, 472, 139);
 
         lblNewLabel_1 = new Label(main, SWT.NONE);
-        lblNewLabel_1.setBounds(124, 420, 61, 17);
-        lblNewLabel_1.setText("console");
+        lblNewLabel_1.setBounds(124, 420, 66, 17);
+        lblNewLabel_1.setText("CONSOLE");
 
         Button btnNewButton = new Button(main, SWT.NONE);
         btnNewButton.addMouseListener(new MouseAdapter()
@@ -144,13 +189,16 @@ public class MainWindow
                         System.err.println("关闭读入流发生异常");
                     }
                     sourcePath = sourceFilePath.getText();
+                    if (sourcePath.lastIndexOf(".") == -1)
+                        return;
                     String dest = sourcePath.substring(0, sourcePath.lastIndexOf(".")) + ".tmp";
+                    generateIndexFile(sourcePath, dest);
                     try {
                         randomAccessFile = new RandomAccessFile(dest, "r");
-                    } catch (FileNotFoundException e1) {
+                        // randomAccessFile.seek(new File(dest).length());
+                    } catch (Exception e1) {
                         System.err.println("找不到带索引的文件");
                     }
-                    generateIndexFile(sourcePath, dest);
                 }
 
             }
@@ -209,24 +257,59 @@ public class MainWindow
 
         Label label_2 = new Label(main, SWT.NONE);
         label_2.setText("输入需要标记的条数：");
-        label_2.setBounds(602, 151, 125, 17);
-
+        label_2.setBounds(602, 151, 150, 17);
+        final ProgressBar progressBar = new ProgressBar(main, SWT.NONE);
+        progressBar.setBounds(602, 227, 150, 37);
         Button start = new Button(main, SWT.NONE);
+        start.addFocusListener(new FocusAdapter() {
+            @Override
+            public void focusGained(FocusEvent e) {
+                main.forceFocus();
+            }
+        });
 
         start.addMouseListener(new MouseAdapter()
         {
             @Override
             public void mouseUp(MouseEvent e)
             {
+                MessageBox box = new MessageBox(main, SWT.ICON_QUESTION | SWT.YES | SWT.NO);
+                // 设置对话框的标题
+                box.setText("提醒");
+                // 设置对话框显示的消息
+                box.setMessage("确定要开始或重新开始吗？");
+                // 打开对话框，将返回值赋给choice
+                int choice = box.open();
+                if (choice == SWT.NO)
+                    return;
+                String sourcePath=sourceFilePath.getText();
+                String dest = sourcePath.substring(0, sourcePath.lastIndexOf(".")) + ".tmp";
+                RandomAccessFile rf = null;  
+                try {
+                    rf = new RandomAccessFile(dest, "r");
+                    long len = rf.length(); 
+                    rf.seek(len-4);
+                    pagenum=rf.readInt()-1;
+                } catch (Exception e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                }  
+               
+                currentItemNum = 0;
+                randoms = generateRandomNumberArray(Integer.valueOf(itemnum.getText().trim()), pagenum);
+                records = new int[Integer.valueOf(itemnum.getText().trim())];
+                progressBar.setMaximum(Integer.valueOf(itemnum.getText().trim()));
+                records = new int[Integer.valueOf(itemnum.getText().trim())];
+                progressBar.setSelection(0);
+                progressComment.setText("0/" + Integer.valueOf(itemnum.getText().trim()));
+                item.setText("");
+
             }
         });
         start.setBounds(653, 170, 99, 27);
         start.setText("开始");
 
-        ProgressBar progressBar = new ProgressBar(main, SWT.NONE);
-        progressBar.setBounds(602, 203, 150, 37);
-
-        Button previous = new Button(main, SWT.NONE);
+        previous = new Button(main, SWT.NONE);
         previous.addMouseListener(new MouseAdapter()
         {
             @Override
@@ -239,6 +322,64 @@ public class MainWindow
                         currentItemNum = 1;
                     }
                     itemContent = readIndexFile(randoms[currentItemNum - 1]);
+                    System.out.println(randoms[randoms.length - 1]);
+                    System.out.println(randoms.length);
+                    System.out.println(randoms[currentItemNum - 1] + itemContent);
+                    Set<String> set = hashMap.keySet();
+                    StringBuilder itemContentBuilder = new StringBuilder();
+                    int index = 0;
+                    for (String regx : set) {
+
+                        String word = RegxUtil.findFirstMatchedWords(regx, itemContent);
+                        if (word != null) {
+                            String[] strs = RegxUtil.findFirstMatchedWordsAndIndex(regx, itemContent);
+                            if (index < Integer.valueOf(strs[1])) {
+                                itemContentBuilder.append(itemContent.substring(index, Integer.valueOf(strs[1])
+                                    + strs[0].length()));
+                                index = Integer.valueOf(strs[1]) + strs[0].length();
+                            }
+                            itemContentBuilder.append("<font color=\"#F00000\">" + word + "(" + regx + ")" + "</font>");
+                            ArrayList<String> pathes = hashMap.get(word);
+                            StringBuffer sBuffer = new StringBuffer();
+                            sBuffer.append("<font color=\"#F00000\">(");
+                            for (String path : pathes) {
+                                sBuffer.append("<a href=" + path + ">");
+                                sBuffer.append(path.substring(path.lastIndexOf(File.separator) + 1,
+                                    path.lastIndexOf("."))
+                                    + "</a>|");
+                            }
+                            sBuffer.append(")</font>");
+                            itemContentBuilder.append(sBuffer);
+
+                        }
+                    }
+                    if (index != itemContent.length()) {
+                        itemContentBuilder.append(itemContent.substring(index, itemContent.length()));
+                    }
+                    item.setText(itemContentBuilder.toString());
+                    if (records[currentItemNum - 1] == 1) {
+                        fp.setSelection(true);
+                        spares.setSelection(false);
+                        tp.setSelection(false);
+                        fn.setSelection(false);
+                    } else if (records[currentItemNum - 1] == 2) {
+                        fn.setSelection(true);
+                        spares.setSelection(false);
+                        tp.setSelection(false);
+                        fp.setSelection(false);
+                    } else if (records[currentItemNum - 1] == 3) {
+                        tp.setSelection(true);
+                        spares.setSelection(false);
+                        fn.setSelection(false);
+                        fp.setSelection(false);
+                    } else if (records[currentItemNum - 1] == 4) {
+                        spares.setSelection(true);
+                    } else {
+                        spares.setSelection(false);
+                        tp.setSelection(false);
+                        fn.setSelection(false);
+                        fp.setSelection(false);
+                    }
                 } catch (Exception e1) {
                     // TODO Auto-generated catch block
                     System.err.println("发生错误");
@@ -247,9 +388,10 @@ public class MainWindow
             }
         });
         previous.setText("后退");
-        previous.setBounds(602, 246, 150, 27);
+        previous.setBounds(602, 270, 150, 27);
 
-        Button next = new Button(main, SWT.NONE);
+        next = new Button(main, SWT.NONE);
+
         next.addMouseListener(new MouseAdapter()
         {
 
@@ -263,33 +405,75 @@ public class MainWindow
                     if (currentItemNum > randoms.length) {
                         currentItemNum = randoms.length;
                     }
+                    progressBar.setSelection(currentItemNum);
+                    progressComment.setText(currentItemNum + "/" + Integer.valueOf(itemnum.getText().trim()));
                     itemContent = readIndexFile(randoms[currentItemNum - 1]);
+                    System.out.println(randoms[randoms.length - 1]);
+                    System.out.println(randoms.length);
+                    System.out.println(randoms[currentItemNum - 1] + itemContent);
                     Set<String> set = hashMap.keySet();
-                    for (String word : set) {
-                        Pattern pattern = Pattern.compile(word.trim());
-                        Matcher matcher = pattern.matcher(itemContent);
-                        if (matcher.find()) {
-                            
+                    StringBuilder itemContentBuilder = new StringBuilder();
+                    int index = 0;
+                    for (String regx : set) {
+
+                        String word = RegxUtil.findFirstMatchedWords(regx, itemContent);
+                        if (word != null) {
+                            String[] strs = RegxUtil.findFirstMatchedWordsAndIndex(regx, itemContent);
+                            if (index < Integer.valueOf(strs[1])) {
+                                itemContentBuilder.append(itemContent.substring(index, Integer.valueOf(strs[1])
+                                    + strs[0].length()));
+                                index = Integer.valueOf(strs[1]) + strs[0].length();
+                            }
+                            itemContentBuilder.append("<font color=\"#F00000\">" + word + "(" + regx + ")" + "</font>");
+                            ArrayList<String> pathes = hashMap.get(word);
+                            StringBuffer sBuffer = new StringBuffer();
+                            sBuffer.append("<font color=\"#F00000\">(");
+                            for (String path : pathes) {
+                                sBuffer.append("<a href=" + path + ">");
+                                sBuffer.append(path.substring(path.lastIndexOf(File.separator) + 1,
+                                    path.lastIndexOf("."))
+                                    + "</a>|");
+                            }
+                            sBuffer.append(")</font>");
+                            itemContentBuilder.append(sBuffer);
+
                         }
-                        
-                        Font font = item.getFont();
-                        item.setFont(SWTResourceManager.getFont("微软雅黑", 13, SWT.NORMAL | SWT.COLOR_RED));
-                        item.append(word);
-                        ArrayList<String> pathes = hashMap.get(word);
-                        item.append("(");
-                        for (String path : pathes) {
-                             item.append(path.substring(path.lastIndexOf(File.separator)+1,path.lastIndexOf("."))+"|");
-                        }
-                        item.append(")");
-                        item.setFont(font);
                     }
+                    if (index != itemContent.length()) {
+                        itemContentBuilder.append(itemContent.substring(index, itemContent.length()));
+                    }
+                    item.setText(itemContentBuilder.toString());
+                    if (records[currentItemNum - 1] == 1) {
+                        fp.setSelection(true);
+                        spares.setSelection(false);
+                        tp.setSelection(false);
+                        fn.setSelection(false);
+                    } else if (records[currentItemNum - 1] == 2) {
+                        fn.setSelection(true);
+                        spares.setSelection(false);
+                        tp.setSelection(false);
+                        fp.setSelection(false);
+                    } else if (records[currentItemNum - 1] == 3) {
+                        tp.setSelection(true);
+                        spares.setSelection(false);
+                        fn.setSelection(false);
+                        fp.setSelection(false);
+                    } else if (records[currentItemNum - 1] == 4) {
+                        spares.setSelection(true);
+                    } else {
+                        spares.setSelection(false);
+                        tp.setSelection(false);
+                        fn.setSelection(false);
+                        fp.setSelection(false);
+                    }
+
                 } catch (Exception e1) {
-                    System.err.println("发生错误");
+                    e1.printStackTrace();
                 }
             }
         });
         next.setText("前进");
-        next.setBounds(602, 282, 150, 27);
+        next.setBounds(602, 303, 150, 27);
 
         Button btnNewButton_2 = new Button(main, SWT.NONE);
         btnNewButton_2.addMouseListener(new MouseAdapter()
@@ -322,24 +506,270 @@ public class MainWindow
         btnNewButton_2.setText("...");
 
         Button btnNewButton_3 = new Button(main, SWT.NONE);
-        btnNewButton_3.setBounds(516, 588, 80, 27);
+        btnNewButton_3.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseUp(MouseEvent e)
+            {
+                if (resultPath.getText() == null || resultPath.getText().trim() == "") {
+                    MessageDialog.openInformation(main, "提示", "请输入所要保存的路径");
+                    return;
+                }
+                try {
+                    StringBuffer recordsBuffer = new StringBuffer();
+                    for (int i = 0; i < currentItemNum - 1; i++) {
+                        recordsBuffer.append(records[i] + ",");
+                    }
+                    StringBuffer randomsBuffer = new StringBuffer();
+                    for (int j = 0; j < currentItemNum - 1; j++) {
+                        randomsBuffer.append(randoms[j] + ",");
+                    }
+                    String line =
+                        new Date() + "\t" + "词典路径:" + dictFolder.getText() + "\t" + "源文件路径:" + sourceFilePath.getText()
+                            + "\t" + "标记的个数:" + currentItemNum + "\t" + "总个数:" + itemnum.getText() + "\t"
+                            + "precision:" + precision + "\t" + "recall:" + recall + "\t" + "标记详情:"
+                            + recordsBuffer.toString() + "\t" + "标记所对应的编号:" + randomsBuffer.toString();
+                    IOUtil.writeLineByAppend(resultPath.getText(), line);
+                } catch (Exception e1) {
+                    // TODO Auto-generated catch block
+                    e1.printStackTrace();
+                }
+
+            }
+        });
+        btnNewButton_3.setBounds(516, 594, 80, 27);
         btnNewButton_3.setText("保存");
 
-        Button fp = new Button(main, SWT.RADIO);
-        fp.setBounds(126, 599, 69, 17);
+        fp = new Button(main, SWT.RADIO);
+        fp.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseUp(MouseEvent e)
+            {
+                if (records[currentItemNum - 1] == 1) {
+
+                } else if (records[currentItemNum - 1] == 2) {
+                    fpTotal++;
+                    fnTotal--;
+                    records[currentItemNum - 1] = 1;
+                } else if (records[currentItemNum - 1] == 3) {
+                    fpTotal++;
+                    tpTotal--;
+                    records[currentItemNum - 1] = 1;
+                } else if (records[currentItemNum - 1] == 4) {
+
+                } else {
+                    records[currentItemNum - 1] = 1;
+                    fpTotal++;
+                }
+                Double precisionRaw = Double.valueOf(tpTotal) / (Double.valueOf(tpTotal) + Double.valueOf(fpTotal));
+                BigDecimal b = new BigDecimal(precisionRaw);
+                precision = b.setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
+                console.setText("precision:" + precision + "\n" + "recall:" + recall);
+
+            }
+        });
+        fp.setBounds(126, 599, 80, 17);
         fp.setText("标记有错");
 
-        Button fn = new Button(main, SWT.RADIO);
+        fn = new Button(main, SWT.RADIO);
+        fn.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseUp(MouseEvent e)
+            {
+                if (records[currentItemNum - 1] == 1) {
+                    fpTotal--;
+                    fnTotal++;
+                    records[currentItemNum - 1] = 2;
+                } else if (records[currentItemNum - 1] == 2) {
+
+                } else if (records[currentItemNum - 1] == 3) {
+                    fnTotal++;
+                    tpTotal--;
+                    records[currentItemNum - 1] = 2;
+                } else if (records[currentItemNum - 1] == 4) {
+
+                } else {
+                    records[currentItemNum - 1] = 2;
+                    fnTotal++;
+                }
+                System.out.println(fnTotal + " " + tpTotal + " " + fpTotal);
+                Double recallRaw = Double.valueOf(tpTotal) / (Double.valueOf(tpTotal) + Double.valueOf(fnTotal));
+                BigDecimal b1 = new BigDecimal(recallRaw);
+                recall = b1.setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
+                console.setText("precision:" + precision + "\n" + "recall:" + recall);
+            }
+        });
         fn.setText("标记有遗漏");
-        fn.setBounds(198, 599, 80, 17);
+        fn.setBounds(207, 599, 97, 17);
 
-        Button tp = new Button(main, SWT.RADIO);
+        tp = new Button(main, SWT.RADIO);
+        tp.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseUp(MouseEvent e)
+            {
+                if (records[currentItemNum - 1] == 1) {
+                    fpTotal--;
+                    tpTotal++;
+                    records[currentItemNum - 1] = 3;
+                } else if (records[currentItemNum - 1] == 2) {
+                    fnTotal--;
+                    tpTotal++;
+                    records[currentItemNum - 1] = 3;
+                } else if (records[currentItemNum - 1] == 3) {
+
+                } else if (records[currentItemNum - 1] == 4) {
+
+                } else {
+                    records[currentItemNum - 1] = 3;
+                    tpTotal++;
+                }
+                Double precisionRaw = Double.valueOf(tpTotal) / (Double.valueOf(tpTotal) + Double.valueOf(fpTotal));
+                BigDecimal b2 = new BigDecimal(precisionRaw);
+                precision = b2.setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
+                Double recallRaw = Double.valueOf(tpTotal) / (Double.valueOf(tpTotal) + Double.valueOf(fnTotal));
+                BigDecimal b3 = new BigDecimal(recallRaw);
+                recall = b3.setScale(2, BigDecimal.ROUND_HALF_UP).doubleValue();
+                console.setText("precision:" + precision + "\n" + "recall:" + recall);
+            }
+        });
         tp.setText("标记正确");
-        tp.setBounds(284, 599, 69, 17);
+        tp.setBounds(310, 599, 86, 17);
 
-        Button button_2 = new Button(main, SWT.RADIO);
-        button_2.setText("其他");
-        button_2.setBounds(359, 599, 97, 17);
+        spares = new Button(main, SWT.RADIO);
+        spares.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseUp(MouseEvent e)
+            {
+                records[currentItemNum - 1] = 4;
+            }
+        });
+        spares.setText("其他");
+        spares.setBounds(402, 599, 97, 17);
+
+        item = new Browser(main, SWT.NONE);
+        item.addLocationListener(new LocationAdapter()
+        {
+            @Override
+            public void changing(LocationEvent event)
+            {
+                String urlString = event.location;
+                if (!"about:blank".equals(urlString)) {
+                    item.stop();
+                    item.setText(item.getText());
+                    String[] words = null;
+                    String dictPath = urlString.substring("file:///".length(), urlString.length());
+                    try {
+                        words = IOUtil.readLines(dictPath);
+                    } catch (Exception e) {
+                        // TODO Auto-generated catch block
+                        e.printStackTrace();
+                    }
+                    dictContent.setText("");
+                    for (String word : words) {
+                        dictContent.append(word + "\n");
+                    }
+                    dictName.setText(dictPath);
+                }
+            }
+        });
+        item.setBounds(124, 61, 472, 348);
+
+        Button btnNewButton_4 = new Button(main, SWT.NONE);
+        btnNewButton_4.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseUp(MouseEvent e)
+            {
+                console.setText("");
+            }
+        });
+        btnNewButton_4.setBounds(472, 416, 124, 25);
+        btnNewButton_4.setText("reset console");
+
+        progressComment = new Label(main, SWT.NONE);
+        progressComment.setAlignment(SWT.RIGHT);
+        progressComment.setBounds(602, 203, 150, 20);
+        progressComment.setText("0/0");
+
+        resultPath = new Text(main, SWT.BORDER);
+        resultPath.setBounds(263, 417, 161, 23);
+
+        Button button = new Button(main, SWT.NONE);
+        button.addMouseListener(new MouseAdapter()
+        {
+            @Override
+            public void mouseUp(MouseEvent e)
+            {
+                FileDialog fileDialog = new FileDialog(main);
+                fileDialog.setText("chooser");
+                fileDialog.open();
+                resultPath.setText(fileDialog.getFilterPath() + File.separator + fileDialog.getFileName());
+            }
+        });
+        button.setText("...");
+        button.setBounds(430, 415, 36, 27);
+
+        Label lblNewLabel_2 = new Label(main, SWT.NONE);
+        lblNewLabel_2.setAlignment(SWT.RIGHT);
+        lblNewLabel_2.setBounds(196, 420, 61, 17);
+        lblNewLabel_2.setText("结果保存在");
+        
+        //=========================
+        //快捷键
+        //=========================
+        Listener listener =new Listener(){
+            
+            @Override
+            public void handleEvent(Event e)
+            {
+                System.out.println(e.keyCode);
+                if (main.isFocusControl()) {
+                    if (e.keyCode == 100) {
+                        e.widget = next;
+                        // 主动触发button点击事件
+                        next.notifyListeners(SWT.MouseUp, e);
+                    }
+                    if(e.keyCode==97){
+                        e.widget = previous;
+                        // 主动触发button点击事件
+                        previous.notifyListeners(SWT.MouseUp, e);
+                    }
+                    if(e.keyCode==106){
+                        fp.setSelection(true);
+                        e.widget = fp;
+                        // 主动触发button点击事件
+                        fp.notifyListeners(SWT.MouseUp, e);
+                    }
+                    if(e.keyCode==107){
+                        fn.setSelection(true);
+                        e.widget = fn;
+                        // 主动触发button点击事件
+                        fn.notifyListeners(SWT.MouseUp, e);
+                    }if(e.keyCode==108){
+                        tp.setSelection(true);
+                        e.widget = tp;
+                        // 主动触发button点击事件
+                        tp.notifyListeners(SWT.MouseUp, e);
+                    }if(e.keyCode==59){
+                        spares.setSelection(true);
+                        e.widget = spares;
+                        // 主动触发button点击事件
+                        spares.notifyListeners(SWT.MouseUp, e);
+                    }
+                }
+                
+            }
+            
+        };
+        
+        
+        
+        main.getDisplay().addFilter(SWT.KeyDown, listener);
+       
 
         main.open();
         main.layout();
@@ -352,11 +782,11 @@ public class MainWindow
 
     private static String readIndexFile(int rowNum) throws Exception
     {
-        while (randomAccessFile.readLong() != rowNum) {
+        randomAccessFile.seek(0);
+        while (randomAccessFile.readInt() != rowNum) {
             randomAccessFile.skipBytes(randomAccessFile.readUnsignedShort());
         }
         String content = randomAccessFile.readUTF();
-        randomAccessFile.seek(0);
 
         return content;
 
@@ -409,6 +839,7 @@ public class MainWindow
                 if (!threads[0].isAlive() && !threads[1].isAlive() && !threads[2].isAlive()) {
                     try {
                         if (pageWriter != null && pageWriter.getOut() != null) {
+                            pageWriter.getOut().writeInt(pageWriter.getPagenum()+1);
                             pageWriter.getOut().flush();
                             pageWriter.getOut().close();
                         }
@@ -423,4 +854,8 @@ public class MainWindow
             }
         }
     }
+    // ====================================================
+    // 快捷键
+    // ====================================================
+
 }
