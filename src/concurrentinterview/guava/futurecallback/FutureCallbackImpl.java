@@ -6,7 +6,7 @@ import concurrentinterview.CountLatchDownTest.CountDownLatchTest;
 import java.util.concurrent.CountDownLatch;
 
 /**
- * Created by Administrator on 2015/6/23.
+ *
  */
 public class FutureCallbackImpl implements FutureCallback<String> {
 
