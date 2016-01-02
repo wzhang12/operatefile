@@ -1,20 +1,19 @@
-package concurrentinterview.promisefuturecallback.future.impl;
-
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.util.concurrent.ExecutionException;
-
-import java.util.concurrent.TimeUnit;
-
 import concurrentinterview.promisefuturecallback.future.TaskCallback;
 import concurrentinterview.promisefuturecallback.future.TaskFuture;
 import concurrentinterview.promisefuturecallback.future.TaskPromise;
+import concurrentinterview.promisefuturecallback.future.impl.DefaultTaskPromise;
 import org.junit.Before;
 import org.junit.Test;
+
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+
+import static junit.framework.Assert.assertEquals;
+import static junit.framework.Assert.assertNull;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+
 
 public class DefaultTaskPromiseTest {
 
